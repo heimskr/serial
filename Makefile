@@ -11,3 +11,6 @@ $(OUTPUT): $(OBJECTS)
 
 clean:
 	rm -f $(OUTPUT) $(OBJECTS)
+
+test: $(OUTPUT)
+	./$(OUTPUT) /dev/tty.usbserial-0001 115200
