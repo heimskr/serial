@@ -4,7 +4,7 @@ SOURCES  := main.cpp
 OBJECTS  := $(SOURCES:.cpp=.o)
 
 $(OUTPUT): $(OBJECTS)
-	$(COMPILER) $^ -o $@
+	$(COMPILER) $^ -o $@ -lcurses
 
 %.o: %.cpp
 	$(COMPILER) -c $< -o $@

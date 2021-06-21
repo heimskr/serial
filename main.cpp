@@ -1,11 +1,13 @@
 // Credit: https://stackoverflow.com/a/6947758
 
+#include <curses.h>
 #include <fcntl.h>
 #include <iostream>
 #include <stdint.h>
 #include <string>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -146,7 +148,6 @@ int main(int argc, char **argv) {
 
 	tty.c_cflag |= CLOCAL | CREAD;
 
-
 	tty.c_cflag &= ~(PARENB | PARODD | CMSPAR);
 	switch (parity) {
 		case Parity::Even:  tty.c_cflag |= PARENB; break;
@@ -174,11 +175,61 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	bool alive = true;
+
+	int pipes[2];
+	if (pipe(pipes) < 0) {
+		std::cerr << "pipe failed: " << strerror(errno) << "\n";
+		return 1;
+	}
+
+	auto write_thread = std::thread([&]() {
+		termios term;
+		if (tcgetattr(STDIN_FILENO, &term) < 0) {
+			std::cerr << "Couldn't tcgetattr on stdin: " << strerror(errno) << "\n";
+			return;
+		}
+
+		term.c_lflag &= ~(ECHO | ICANON | ISIG);
+		// term.c_lflag &= ~(ECHO | ICANON);
+		term.c_iflag &= ~IXON;
+		if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term) < 0) {
+			std::cerr << "Couldn't tcsetattr on stdin: " << strerror(errno) << "\n";
+			return;
+		}
+
+		char ch;
+		while (std::cin >> ch) {
+			std::cout << "(" << ch << ")";
+			if (ch == 'c') {
+				alive = false;
+				write(pipes[1], &ch, 1);
+			} else if (ch == 'q') {
+				break;
+			} else {
+				write(fd, &ch, 1);
+			}
+		}
+
+		std::cout << "Bye.\n";
+	});
+
+
+
+	fd_set fds;
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	FD_SET(pipes[0], &fds);
+	timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+
 	char ch;
 	for (;;) {
-
-		// int sstatus = select(1, &fds, nullptr, nullptr, nullptr);
+		int sstatus = select(2, &fds, nullptr, nullptr, &tv);
 		// std::cout << "(" << sstatus << ")\n";
+		if (!alive)
+			break;
 		// std::cout << "Reading...\n";
 		ssize_t status = read(fd, &ch, 1);
 		// std::cout << "Read.\n";
@@ -189,6 +240,10 @@ int main(int argc, char **argv) {
 			std::cout << ch;
 		}
 	}
+
+	std::cout << "Joining...\n";
+	write_thread.join();
+	std::cout << "Joined.\n";
 
 	return 0;
 }
