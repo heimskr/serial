@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
 	}
 
 	cfsetspeed(&tty, baud);
-	tty.c_cflag = tty.c_cflag & ~CSIZE;
+	tty.c_cflag &= ~CSIZE;
 	switch (databits) {
 		case 5: tty.c_cflag |= CS5; break;
 		case 6: tty.c_cflag |= CS6; break;
@@ -190,8 +190,7 @@ int main(int argc, char **argv) {
 			return;
 		}
 
-		term.c_lflag &= ~(ECHO | ICANON | ISIG);
-		// term.c_lflag &= ~(ECHO | ICANON);
+		term.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
 		term.c_iflag &= ~IXON;
 		if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term) < 0) {
 			std::cerr << "Couldn't tcsetattr on stdin: " << strerror(errno) << "\n";
@@ -199,22 +198,20 @@ int main(int argc, char **argv) {
 		}
 
 		char ch;
-		while (std::cin >> ch) {
-			std::cout << "(" << ch << ")";
-			if (ch == 'c') {
+		while (read(STDIN_FILENO, &ch, 1)) {
+			if (ch == 3) {
 				alive = false;
-				write(pipes[1], &ch, 1);
-			} else if (ch == 'q') {
+				if (write(pipes[1], &ch, 1) < 0)
+					std::cerr << "Couldn't write to pipe: " << strerror(errno) << "\n";
 				break;
 			} else {
-				write(fd, &ch, 1);
+				if (write(fd, &ch, 1) < 0)
+					std::cerr << "Couldn't write to fd: " << strerror(errno) << "\n";
+				if (write(pipes[1], &ch, 1) < 0)
+					std::cerr << "Couldn't write to pipe: " << strerror(errno) << "\n";
 			}
 		}
-
-		std::cout << "Bye.\n";
 	});
-
-
 
 	fd_set fds;
 	FD_ZERO(&fds);
@@ -227,12 +224,10 @@ int main(int argc, char **argv) {
 	char ch;
 	for (;;) {
 		int sstatus = select(2, &fds, nullptr, nullptr, &tv);
-		// std::cout << "(" << sstatus << ")\n";
+		fflush(stdout);
 		if (!alive)
 			break;
-		// std::cout << "Reading...\n";
 		ssize_t status = read(fd, &ch, 1);
-		// std::cout << "Read.\n";
 		if (status < 0) {
 			std::cerr << "Reading failed: " << strerror(errno) << "\n";
 			return 1;
@@ -241,9 +236,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	std::cout << "Joining...\n";
 	write_thread.join();
-	std::cout << "Joined.\n";
-
 	return 0;
 }
