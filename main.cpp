@@ -1,5 +1,6 @@
 // Credit: https://stackoverflow.com/a/6947758
 
+#include <cstring>
 #include <curses.h>
 #include <fcntl.h>
 #include <iostream>
